@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">DriverMetrics</string>
+    <string name="accessibility_service_description">Читає екрани замовлень у водійських додатках таксі (Bolt тощо) і показує оплату за км/год ще до прийняття замовлення.</string>
+</resources>
