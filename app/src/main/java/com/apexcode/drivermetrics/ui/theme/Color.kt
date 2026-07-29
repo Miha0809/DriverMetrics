@@ -2,10 +2,13 @@ package com.apexcode.drivermetrics.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Route/navigation blue — the app's primary. Deliberately not green/amber/red so it never reads
+// as a profitability signal next to the overlay's own green/yellow/red indicator language.
+val RouteBlue80 = Color(0xFFAAC7FF)
+val RouteBlue40 = Color(0xFF2F5FCB)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val SlateGrey80 = Color(0xFFC2C9DD)
+val SlateGrey40 = Color(0xFF525C76)
+
+val Amber80 = Color(0xFFFFDCA8)
+val Amber40 = Color(0xFF7A5900)

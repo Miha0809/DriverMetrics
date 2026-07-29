@@ -1,26 +1,42 @@
 package com.apexcode.drivermetrics.ui.settings
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,6 +54,7 @@ import com.apexcode.drivermetrics.core.model.settings.CriterionThreshold
 import com.apexcode.drivermetrics.core.model.settings.RouteDisplayMode
 import com.apexcode.drivermetrics.core.model.settings.isDisplayOptionEnabled
 import com.apexcode.drivermetrics.settings.AggregatorSettingsRepository
+import com.apexcode.drivermetrics.ui.common.SectionCard
 import kotlinx.coroutines.launch
 
 /**
@@ -47,6 +64,7 @@ import kotlinx.coroutines.launch
  * automatically since this screen renders [EVALUATION_CRITERIA_DESCRIPTORS] and
  * [FILTER_RULE_DESCRIPTORS] generically (9.6) rather than having one field per criterion.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     aggregatorSettingsRepository: AggregatorSettingsRepository,
@@ -68,123 +86,149 @@ fun SettingsScreen(
         coroutineScope.launch { aggregatorSettingsRepository.updateSettings(editingAggregator, transform) }
     }
 
-    LazyColumn(modifier = modifier.padding(horizontal = 16.dp)) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
-                TextButton(onClick = onBack) { Text("← Назад") }
-                Text("Налаштування оцінки замовлень", style = MaterialTheme.typography.titleLarge)
-            }
-        }
-        item {
-            SyncToggleRow(
-                enabled = syncEnabled,
-                onChange = { enabled -> coroutineScope.launch { aggregatorSettingsRepository.setSyncEnabled(enabled) } },
-            )
-        }
-        if (!syncEnabled) {
+    Column(modifier = modifier) {
+        TopAppBar(
+            title = { Text("Налаштування оцінки замовлень") },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                }
+            },
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             item {
-                AggregatorSelectorRow(selected = selectedAggregator, onSelect = { selectedAggregator = it })
+                SectionCard(title = "Синхронізація", icon = Icons.Filled.Sync) {
+                    SyncToggleRow(
+                        enabled = syncEnabled,
+                        onChange = { enabled ->
+                            coroutineScope.launch { aggregatorSettingsRepository.setSyncEnabled(enabled) }
+                        },
+                    )
+                    if (!syncEnabled) {
+                        AggregatorSelectorRow(selected = selectedAggregator, onSelect = { selectedAggregator = it })
+                    }
+                }
             }
-        }
 
-        item { SectionHeader("Відображення маршруту") }
-        item {
-            RouteDisplaySection(
-                mode = settings.routeDisplayMode,
-                onChange = { mode -> update { it.copy(routeDisplayMode = mode) } },
-            )
-        }
+            item {
+                SectionCard(title = "Відображення маршруту", icon = Icons.Filled.Route) {
+                    RouteDisplaySection(
+                        mode = settings.routeDisplayMode,
+                        onChange = { mode -> update { it.copy(routeDisplayMode = mode) } },
+                    )
+                }
+            }
 
-        item { SectionHeader("Показ на екрані") }
-        items(DISPLAY_OPTION_DESCRIPTORS) { descriptor ->
-            DisplayOptionRow(
-                descriptor = descriptor,
-                enabled = settings.isDisplayOptionEnabled(descriptor.id),
-                onChange = { enabled ->
-                    update { current -> current.copy(displayOptions = current.displayOptions + (descriptor.id to enabled)) }
-                },
-            )
-        }
-
-        item { SectionHeader("Критерії оцінки вигідності") }
-        items(EVALUATION_CRITERIA_DESCRIPTORS) { descriptor ->
-            EvaluationCriterionRow(
-                descriptor = descriptor,
-                threshold = settings.evaluationCriteria[descriptor.id] ?: CriterionThreshold(),
-                resetKey = editingAggregator,
-                onChange = { threshold ->
-                    update { current ->
-                        val criteria = if (threshold.redBelow == null && threshold.greenAtOrAbove == null) {
-                            current.evaluationCriteria - descriptor.id
-                        } else {
-                            current.evaluationCriteria + (descriptor.id to threshold)
-                        }
-                        current.copy(evaluationCriteria = criteria)
+            item {
+                SectionCard(title = "Показ на екрані", icon = Icons.Filled.Insights) {
+                    DISPLAY_OPTION_DESCRIPTORS.forEachIndexed { index, descriptor ->
+                        if (index > 0) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        DisplayOptionRow(
+                            descriptor = descriptor,
+                            enabled = settings.isDisplayOptionEnabled(descriptor.id),
+                            onChange = { enabled ->
+                                update { current ->
+                                    current.copy(displayOptions = current.displayOptions + (descriptor.id to enabled))
+                                }
+                            },
+                        )
                     }
-                },
-            )
-        }
+                }
+            }
 
-        item { SectionHeader("Правила фільтрації") }
-        items(FILTER_RULE_DESCRIPTORS) { descriptor ->
-            FilterRuleRow(
-                descriptor = descriptor,
-                limit = settings.filterRules[descriptor.id],
-                resetKey = editingAggregator,
-                onChange = { limit ->
-                    update { current ->
-                        val rules = if (limit == null) {
-                            current.filterRules - descriptor.id
-                        } else {
-                            current.filterRules + (descriptor.id to limit)
-                        }
-                        current.copy(filterRules = rules)
+            item {
+                SectionCard(title = "Критерії оцінки вигідності", icon = Icons.Filled.Tune) {
+                    EVALUATION_CRITERIA_DESCRIPTORS.forEachIndexed { index, descriptor ->
+                        if (index > 0) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        EvaluationCriterionRow(
+                            descriptor = descriptor,
+                            threshold = settings.evaluationCriteria[descriptor.id] ?: CriterionThreshold(),
+                            resetKey = editingAggregator,
+                            onChange = { threshold ->
+                                update { current ->
+                                    val criteria = if (threshold.redBelow == null && threshold.greenAtOrAbove == null) {
+                                        current.evaluationCriteria - descriptor.id
+                                    } else {
+                                        current.evaluationCriteria + (descriptor.id to threshold)
+                                    }
+                                    current.copy(evaluationCriteria = criteria)
+                                }
+                            },
+                        )
                     }
-                },
-            )
+                }
+            }
+
+            item {
+                SectionCard(title = "Правила фільтрації", icon = Icons.Filled.FilterAlt) {
+                    FILTER_RULE_DESCRIPTORS.forEachIndexed { index, descriptor ->
+                        if (index > 0) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        FilterRuleRow(
+                            descriptor = descriptor,
+                            limit = settings.filterRules[descriptor.id],
+                            resetKey = editingAggregator,
+                            onChange = { limit ->
+                                update { current ->
+                                    val rules = if (limit == null) {
+                                        current.filterRules - descriptor.id
+                                    } else {
+                                        current.filterRules + (descriptor.id to limit)
+                                    }
+                                    current.copy(filterRules = rules)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-    Text(text = title, style = MaterialTheme.typography.titleMedium)
 }
 
 @Composable
 private fun SyncToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.widthIn(max = 280.dp)) {
-            Text(text = "Синхронізувати між агрегаторами", style = MaterialTheme.typography.titleMedium)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Синхронізувати між агрегаторами", style = MaterialTheme.typography.bodyLarge)
             Text(
                 text = if (enabled) {
-                    "Увімкнено — зміна параметра застосовується до всіх агрегаторів"
+                    "Зміна параметра застосовується до всіх агрегаторів"
                 } else {
-                    "Вимкнено — кожен агрегатор має власні налаштування"
+                    "Кожен агрегатор має власні налаштування"
                 },
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
-        Checkbox(checked = enabled, onCheckedChange = onChange)
+        Switch(checked = enabled, onCheckedChange = onChange)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AggregatorSelectorRow(selected: AggregatorId, onSelect: (AggregatorId) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        AggregatorId.entries.forEach { aggregator ->
-            if (aggregator == selected) {
-                Button(onClick = { onSelect(aggregator) }) { Text(aggregator.displayName) }
-            } else {
-                OutlinedButton(onClick = { onSelect(aggregator) }) { Text(aggregator.displayName) }
+        AggregatorId.entries.forEachIndexed { index, aggregator ->
+            SegmentedButton(
+                selected = aggregator == selected,
+                onClick = { onSelect(aggregator) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = AggregatorId.entries.size),
+            ) {
+                Text(aggregator.displayName)
             }
         }
     }
@@ -192,43 +236,66 @@ private fun AggregatorSelectorRow(selected: AggregatorId, onSelect: (AggregatorI
 
 @Composable
 private fun RouteDisplaySection(mode: RouteDisplayMode, onChange: (RouteDisplayMode) -> Unit) {
-    Column {
-        RouteDisplayOptionRow(
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        RouteDisplayOptionCard(
             selected = mode == RouteDisplayMode.CLIENT_TO_DROPOFF_ONLY,
-            label = "Тільки від клієнта до кінцевої точки (як зараз)",
+            label = "Тільки від клієнта до кінцевої точки",
+            helper = "Як зараз",
             onClick = { onChange(RouteDisplayMode.CLIENT_TO_DROPOFF_ONLY) },
         )
-        RouteDisplayOptionRow(
+        RouteDisplayOptionCard(
             selected = mode == RouteDisplayMode.DRIVER_TO_PICKUP_AND_DROPOFF,
             label = "Від поточного місця водія до клієнта і далі до кінцевої точки",
+            helper = "Повний маршрут",
             onClick = { onChange(RouteDisplayMode.DRIVER_TO_PICKUP_AND_DROPOFF) },
         )
     }
 }
 
+/** A selectable option styled as its own outlined surface (highlighted border when selected) rather than a bare radio row. */
 @Composable
-private fun RouteDisplayOptionRow(selected: Boolean, label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun RouteDisplayOptionCard(selected: Boolean, label: String, helper: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        RadioButton(selected = selected, onClick = onClick)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(selected = selected, onClick = onClick)
+            Spacer(modifier = Modifier.width(4.dp))
+            Column {
+                Text(text = label, style = MaterialTheme.typography.bodyMedium)
+                Text(text = helper, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
 @Composable
 private fun DisplayOptionRow(descriptor: DisplayOptionDescriptor, enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            imageVector = descriptor.icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Text(text = descriptor.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Checkbox(checked = enabled, onCheckedChange = onChange)
+        Switch(checked = enabled, onCheckedChange = onChange)
     }
 }
 
@@ -249,9 +316,23 @@ private fun EvaluationCriterionRow(
         mutableStateOf(threshold.greenAtOrAbove?.let(::formatNumber) ?: "")
     }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text(text = "${descriptor.label} (${descriptor.unit})", style = MaterialTheme.typography.titleSmall)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = descriptor.icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "${descriptor.label} (${descriptor.unit})", style = MaterialTheme.typography.titleSmall)
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             OutlinedTextField(
                 value = redText,
                 onValueChange = { value ->
@@ -288,9 +369,18 @@ private fun FilterRuleRow(
     var text by remember(resetKey, descriptor.id) { mutableStateOf(limit?.let(::formatNumber) ?: "") }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            imageVector = descriptor.icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = "${descriptor.label} (${descriptor.unit})",
             style = MaterialTheme.typography.bodyMedium,
