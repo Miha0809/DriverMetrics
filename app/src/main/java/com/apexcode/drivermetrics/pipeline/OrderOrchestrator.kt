@@ -17,6 +17,8 @@ import com.apexcode.drivermetrics.routing.RoutingRepository
 import com.apexcode.drivermetrics.settings.AggregatorSettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -113,25 +115,34 @@ class OrderOrchestrator @Inject constructor(
      * Pickup -> dropoff by default — the "доїзд" to the client is counted in the €/год metric via
      * [TaxiOrder.pickupEta] regardless, but only routed/drawn here too when [routeDisplayMode] is
      * DRIVER_TO_PICKUP_AND_DROPOFF (9.2), and only if the driver's current location is known.
+     *
+     * Pickup/dropoff geocoding and the two OSRM legs are each independent of one another, so
+     * they're fired concurrently via [async] rather than awaited one at a time — sequentially
+     * they added up to a very noticeable 2-3s before the map appeared, since every step is a real
+     * network round trip.
      */
-    private suspend fun fetchMapRoute(order: TaxiOrder, routeDisplayMode: RouteDisplayMode): MapRoute? {
-        val pickup = order.pickupLatLng ?: order.pickupAddress?.let { geocodingRepository.geocode(it) }
-        val dropoff = order.dropoffLatLng ?: order.dropoffAddress?.let { geocodingRepository.geocode(it) }
-        if (pickup == null || dropoff == null) return null
-        val tripGeometry = routingRepository.getRoute(pickup, dropoff)?.geometry.orEmpty()
+    private suspend fun fetchMapRoute(order: TaxiOrder, routeDisplayMode: RouteDisplayMode): MapRoute? = coroutineScope {
+        val pickupDeferred = async { order.pickupLatLng ?: order.pickupAddress?.let { geocodingRepository.geocode(it) } }
+        val dropoffDeferred = async { order.dropoffLatLng ?: order.dropoffAddress?.let { geocodingRepository.geocode(it) } }
+        val pickup = pickupDeferred.await()
+        val dropoff = dropoffDeferred.await()
+        if (pickup == null || dropoff == null) return@coroutineScope null
 
         val driverLocation = if (routeDisplayMode == RouteDisplayMode.DRIVER_TO_PICKUP_AND_DROPOFF) {
             currentLocationProvider.getLastKnownLocation()
         } else {
             null
         }
-        val pickupLegGeometry = driverLocation?.let { routingRepository.getRoute(it, pickup)?.geometry.orEmpty() }
-            .orEmpty()
 
-        return MapRoute(
+        val tripGeometryDeferred = async { routingRepository.getRoute(pickup, dropoff)?.geometry.orEmpty() }
+        val pickupLegGeometryDeferred = driverLocation?.let { loc ->
+            async { routingRepository.getRoute(loc, pickup)?.geometry.orEmpty() }
+        }
+
+        MapRoute(
             pickup = pickup,
             dropoff = dropoff,
-            geometry = pickupLegGeometry + tripGeometry,
+            geometry = pickupLegGeometryDeferred?.await().orEmpty() + tripGeometryDeferred.await(),
             driverLocation = driverLocation,
         )
     }

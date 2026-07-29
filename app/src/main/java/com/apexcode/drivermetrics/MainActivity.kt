@@ -162,17 +162,26 @@ private fun OnboardingScreen(
     val accessibilityEnabled = remember(refreshKey) { isAccessibilityServiceEnabled(context) }
     val overlayGranted = remember(refreshKey) { Settings.canDrawOverlays(context) }
 
+    // Precise (fine) location matters here: coarse-only location comes from the network/cell
+    // provider and can be off by hundreds of meters to a few kilometers, which visibly threw off
+    // the driver -> pickup leg drawn on the mini-map. Both are requested together so the system
+    // permission dialog offers its "Precise" vs "Approximate" choice; granted is true if either
+    // was allowed (coarse still lets the feature work, just less accurately).
     var locationGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
                 context,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-            ) == PackageManager.PERMISSION_GRANTED,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ) == PackageManager.PERMISSION_GRANTED,
         )
     }
     val locationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted -> locationGranted = granted }
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results -> locationGranted = results.values.any { it } }
 
     val status by pipelineStatusRepository.status.collectAsState()
     val wideMapZoom by mapSettingsRepository.wideMapZoom.collectAsState(initial = true)
@@ -216,11 +225,16 @@ private fun OnboardingScreen(
                     PermissionListItem(
                         icon = Icons.Filled.LocationOn,
                         title = "Місцезнаходження (опційно)",
-                        description = "Для розрахунку часу доїзду до точки посадки",
+                        description = "Для маршруту доїзду до клієнта на міні-карті",
                         granted = locationGranted,
                         actionLabel = "Дозволити",
                         onAction = {
-                            locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                ),
+                            )
                         },
                     )
                 }
