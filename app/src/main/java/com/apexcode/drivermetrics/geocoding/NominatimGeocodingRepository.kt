@@ -14,8 +14,11 @@ import javax.inject.Inject
  * policy recommends ~1 request/sec for sustained traffic; [MIN_INTERVAL_MS] is set lower than
  * that on purpose — this app only ever fires a couple of requests per order (a few times an
  * hour, not sustained), so a short burst well under the strict 1/sec spacing is a reasonable
- * trade for a map that doesn't take seconds to appear. Bump it back toward 1000+ms if usage
- * patterns change (e.g. many orders/minute) or Nominatim starts rate-limiting responses.
+ * trade for a map that doesn't take seconds to appear. It's the dominant cause of mini-map
+ * latency (it gates the two geocode calls a single order needs — pickup and dropoff — even when
+ * they're fired concurrently), so keep this as low as still feels like a good-faith reading of
+ * "not sustained traffic" rather than raising it back up by default. Bump it back toward 1000+ms
+ * if usage patterns change (e.g. many orders/minute) or Nominatim starts rate-limiting responses.
  * Results are cached for the process lifetime since a driver re-sees the same handful of
  * pickup/dropoff addresses repeatedly during a shift.
  */
@@ -87,7 +90,7 @@ class NominatimGeocodingRepository @Inject constructor(
 
     private companion object {
         const val TAG = "Geocoding"
-        const val MIN_INTERVAL_MS = 400L
+        const val MIN_INTERVAL_MS = 200L
         val INITIAL_REGEX = Regex("""\b\p{L}\.\s*""")
         val EXTRA_SPACES_REGEX = Regex("""\s{2,}""")
     }
