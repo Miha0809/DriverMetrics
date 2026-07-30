@@ -11,8 +11,11 @@ import com.apexcode.drivermetrics.core.model.TaxiOrder
 interface OrderParser {
     val sourcePackageNames: Set<String>
 
-    fun canParse(root: AccessibilityNodeInfo): Boolean
+    // Take the already-collected text rather than the raw tree so ParserRegistry can walk the
+    // tree (an AccessibilityNodeInfo traversal — cross-process IPC per node) exactly once per
+    // event instead of once for canParse and again for parse.
+    fun canParse(texts: List<String>): Boolean
 
     /** Returns null if no order is currently visible in this tree. */
-    fun parse(root: AccessibilityNodeInfo): TaxiOrder?
+    fun parse(texts: List<String>): TaxiOrder?
 }

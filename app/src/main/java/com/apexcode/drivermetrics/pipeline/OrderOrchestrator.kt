@@ -98,10 +98,17 @@ class OrderOrchestrator @Inject constructor(
 
             // Best-effort, map only — doesn't touch the metrics already shown above. Skipped
             // outright when the driver turned the map off, so it doesn't geocode/route for
-            // nothing.
+            // nothing. Its own try/catch so a geocode/route hiccup here can never hide the
+            // stats overlay that's already successfully showing above.
             if (showMap) {
-                val mapRoute = fetchMapRoute(order, settings.routeDisplayMode)
-                overlayController.show(order, metrics, displayRoute, mapRoute, showStats, showMap)
+                try {
+                    val mapRoute = fetchMapRoute(order, settings.routeDisplayMode)
+                    overlayController.show(order, metrics, displayRoute, mapRoute, showStats, showMap)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to fetch the map route for ${order.sourceApplication} order", e)
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -122,22 +129,29 @@ class OrderOrchestrator @Inject constructor(
      * network round trip.
      */
     private suspend fun fetchMapRoute(order: TaxiOrder, routeDisplayMode: RouteDisplayMode): MapRoute? = coroutineScope {
-        val pickupDeferred = async { order.pickupLatLng ?: order.pickupAddress?.let { geocodingRepository.geocode(it) } }
-        val dropoffDeferred = async { order.dropoffLatLng ?: order.dropoffAddress?.let { geocodingRepository.geocode(it) } }
-        val pickup = pickupDeferred.await()
-        val dropoff = dropoffDeferred.await()
-        if (pickup == null || dropoff == null) return@coroutineScope null
-
+        // Non-blocking cached read (see CurrentLocationProvider), so resolving it up front costs
+        // nothing and lets the doїзд leg below start the moment pickup resolves.
         val driverLocation = if (routeDisplayMode == RouteDisplayMode.DRIVER_TO_PICKUP_AND_DROPOFF) {
             currentLocationProvider.getLastKnownLocation()
         } else {
             null
         }
 
-        val tripGeometryDeferred = async { routingRepository.getRoute(pickup, dropoff)?.geometry.orEmpty() }
+        val pickupDeferred = async { order.pickupLatLng ?: order.pickupAddress?.let { geocodingRepository.geocode(it) } }
+        val dropoffDeferred = async { order.dropoffLatLng ?: order.dropoffAddress?.let { geocodingRepository.geocode(it) } }
+
+        // Only needs pickup (and the driver's already-known location), so it's fired as soon as
+        // pickup resolves rather than waiting on dropoff's geocode too — overlaps it with the
+        // dropoff geocode + trip route below instead of running fully after them.
         val pickupLegGeometryDeferred = driverLocation?.let { loc ->
-            async { routingRepository.getRoute(loc, pickup)?.geometry.orEmpty() }
+            async { pickupDeferred.await()?.let { routingRepository.getRoute(loc, it)?.geometry }.orEmpty() }
         }
+
+        val pickup = pickupDeferred.await()
+        val dropoff = dropoffDeferred.await()
+        if (pickup == null || dropoff == null) return@coroutineScope null
+
+        val tripGeometryDeferred = async { routingRepository.getRoute(pickup, dropoff)?.geometry.orEmpty() }
 
         MapRoute(
             pickup = pickup,

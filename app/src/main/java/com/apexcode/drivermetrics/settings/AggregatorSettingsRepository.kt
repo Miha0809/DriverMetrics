@@ -1,6 +1,7 @@
 package com.apexcode.drivermetrics.settings
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -61,12 +62,20 @@ class AggregatorSettingsRepository @Inject constructor(
         }
     }
 
-    private fun decode(raw: String?): AggregatorSettings =
-        raw?.let { json.decodeFromString(AggregatorSettings.serializer(), it) } ?: AggregatorSettings()
+    private fun decode(raw: String?): AggregatorSettings {
+        if (raw == null) return AggregatorSettings()
+        return try {
+            json.decodeFromString(AggregatorSettings.serializer(), raw)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to decode stored aggregator settings, falling back to defaults", e)
+            AggregatorSettings()
+        }
+    }
 
     private fun aggregatorKey(aggregatorId: AggregatorId) = stringPreferencesKey("settings_${aggregatorId.name}")
 
     private companion object {
+        const val TAG = "AggregatorSettingsRepo"
         val SYNC_ENABLED_KEY = booleanPreferencesKey("sync_enabled")
         val SHARED_SETTINGS_KEY = stringPreferencesKey("settings_shared")
     }

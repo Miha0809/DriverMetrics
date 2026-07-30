@@ -12,7 +12,8 @@ class ParserRegistry @Inject constructor(
     fun parseOrder(packageName: String, root: AccessibilityNodeInfo): TaxiOrder? {
         val parser = parsers.firstOrNull { packageName in it.sourcePackageNames } ?: return null
         return try {
-            if (parser.canParse(root)) parser.parse(root) else null
+            val texts = root.collectAllText()
+            if (parser.canParse(texts)) parser.parse(texts) else null
         } catch (e: Exception) {
             Log.w(TAG, "${parser::class.simpleName} failed to parse $packageName", e)
             null

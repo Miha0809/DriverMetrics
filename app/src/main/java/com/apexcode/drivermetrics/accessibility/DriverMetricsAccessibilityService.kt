@@ -98,7 +98,7 @@ class DriverMetricsAccessibilityService : AccessibilityService() {
 
     private companion object {
         const val TAG = "DriverMetricsA11y"
-        const val DEBOUNCE_MS = 300L
-        const val HARD_CAP_MS = 700L
+        const val DEBOUNCE_MS = 120L
+        const val HARD_CAP_MS = 350L
     }
 }
