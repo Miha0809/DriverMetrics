@@ -17,10 +17,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,8 +53,10 @@ import kotlin.math.roundToInt
 
 private val CARD_MARGIN = 12.dp
 private val CONTENT_PADDING = 12.dp
-private val HEADER_HEIGHT = 28.dp
+private val HEADER_HEIGHT = 32.dp
 private val CONTENT_SPACING = 8.dp
+private val CLOSE_BUTTON_SIZE = 32.dp
+private val CLOSE_ICON_SIZE = 20.dp
 private const val DRIVER_MARKER_COLOR = 0xFF1565C0.toInt()
 private const val PICKUP_MARKER_COLOR = 0xFF2E7D32.toInt()
 private const val DROPOFF_MARKER_COLOR = 0xFFC62828.toInt()
@@ -76,6 +83,7 @@ fun OverlayContent(
     wideMapZoom: Boolean = true,
     showStats: Boolean = true,
     showMap: Boolean = true,
+    onClose: () -> Unit = {},
 ) {
     Card(
         modifier = Modifier
@@ -102,33 +110,48 @@ fun OverlayContent(
                     .fillMaxSize()
                     .padding(CONTENT_PADDING),
             ) {
-                val headerHeight = if (showStats) HEADER_HEIGHT else 0.dp
-                val spacing = if (showStats && showMap) CONTENT_SPACING else 0.dp
-                val mapHeight = (maxHeight - headerHeight - spacing).coerceAtLeast(0.dp)
+                // The header row (stats + close button) is always shown, even with showStats
+                // off, so the close button stays reachable regardless of display settings.
+                val spacing = if (showMap) CONTENT_SPACING else 0.dp
+                val mapHeight = (maxHeight - HEADER_HEIGHT - spacing).coerceAtLeast(0.dp)
 
                 Column(modifier = Modifier.fillMaxSize()) {
-                    if (showStats) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(HEADER_HEIGHT)
-                                .zIndex(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(HEADER_HEIGHT)
+                            .zIndex(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (showStats) {
                             Text(
-                                text = "%.1f €/год  •  %.2f €/км  •  %.1f км  •  %.0f хв".format(
+                                text = "%.1f €/год • %.2f €/км • %.1f км • %.0f хв".format(
                                     metrics.pricePerHour,
                                     metrics.pricePerKm,
                                     route.distanceKm,
                                     route.durationMin,
                                 ),
+                                modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.titleMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
-                        Spacer(modifier = Modifier.height(spacing))
+                        IconButton(
+                            onClick = onClose,
+                            modifier = Modifier.size(CLOSE_BUTTON_SIZE),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Закрити",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(CLOSE_ICON_SIZE),
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(spacing))
                     if (showMap) {
                         RouteMiniMap(
                             mapRoute = mapRoute,

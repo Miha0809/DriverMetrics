@@ -9,6 +9,7 @@ import android.view.WindowManager
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -20,6 +21,7 @@ import com.apexcode.drivermetrics.core.model.TaxiOrder
 import com.apexcode.drivermetrics.settings.MapSettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,6 +47,11 @@ class OverlayController @Inject constructor(
     // constantly as orders appear/disappear) crashed with "performRestore cannot be called when
     // owner is RESUMED".
     private var currentLifecycleOwner: OverlayLifecycleOwner? = null
+    // Set by the overlay's own close (X) button. OrderOrchestrator's present() calls show()
+    // twice per order — once with stats only, again once the map route finishes fetching — so
+    // without this, closing the overlay while that second call is still in flight would just
+    // have it pop back open. Cleared the moment a different order is shown.
+    private var dismissedOrder: TaxiOrder? = null
 
     /**
      * Called from the accessibility service's background pipeline coroutine, but WindowManager
@@ -60,6 +67,8 @@ class OverlayController @Inject constructor(
         showMap: Boolean = true,
     ) {
         withContext(Dispatchers.Main.immediate) {
+            if (order == dismissedOrder) return@withContext
+            dismissedOrder = null
             state.value = OverlayState(order, metrics, route, mapRoute, showStats, showMap)
             ensureViewAdded()
             applyWindowHeight(showMap)
@@ -68,6 +77,17 @@ class OverlayController @Inject constructor(
 
     suspend fun hide() {
         withContext(Dispatchers.Main.immediate) {
+            dismissedOrder = null
+            state.value = null
+            removeViewIfPresent()
+        }
+    }
+
+    /** Called from the overlay's own close (X) button — same as [hide], but remembers the
+     *  dismissed order so it stays closed for it. See [dismissedOrder]. */
+    private suspend fun dismiss() {
+        withContext(Dispatchers.Main.immediate) {
+            dismissedOrder = state.value?.order
             state.value = null
             removeViewIfPresent()
         }
@@ -91,8 +111,17 @@ class OverlayController @Inject constructor(
             setViewTreeSavedStateRegistryOwner(owner)
             setContent {
                 val wideMapZoom by mapSettingsRepository.wideMapZoom.collectAsState(initial = true)
+                val scope = rememberCoroutineScope()
                 state.value?.let {
-                    OverlayContent(it.metrics, it.route, it.mapRoute, wideMapZoom, it.showStats, it.showMap)
+                    OverlayContent(
+                        metrics = it.metrics,
+                        route = it.route,
+                        mapRoute = it.mapRoute,
+                        wideMapZoom = wideMapZoom,
+                        showStats = it.showStats,
+                        showMap = it.showMap,
+                        onClose = { scope.launch { dismiss() } },
+                    )
                 }
             }
         }
@@ -118,9 +147,7 @@ class OverlayController @Inject constructor(
         PixelFormat.TRANSLUCENT,
     ).apply {
         gravity = Gravity.TOP
-        // -TOP_EDGE_SHIFT_PX so the bottom edge stays exactly where it was before the top edge
-        // moved down by that same amount — only the top gap grows.
-        y = (TOP_OFFSET_DP * context.resources.displayMetrics.density).roundToInt() + TOP_EDGE_SHIFT_PX
+        y = TOP_EDGE_SHIFT_PX
     }
 
     /**
@@ -171,8 +198,7 @@ class OverlayController @Inject constructor(
 
     private companion object {
         const val TAG = "OverlayController"
-        const val TOP_OFFSET_DP = 24f
         const val TOP_HALF_FRACTION = 0.5
-        const val TOP_EDGE_SHIFT_PX = 15
+        const val TOP_EDGE_SHIFT_PX = 0
     }
 }
