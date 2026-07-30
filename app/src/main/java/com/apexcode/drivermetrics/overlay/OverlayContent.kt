@@ -6,7 +6,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -17,9 +20,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -27,10 +33,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -55,6 +67,10 @@ private val HEADER_HEIGHT = 32.dp
 private val CONTENT_SPACING = 8.dp
 private val CLOSE_BUTTON_SIZE = 32.dp
 private val CLOSE_ICON_SIZE = 20.dp
+private val ZOOM_BUTTON_SIZE = 44.dp
+private val ZOOM_ICON_SIZE = 26.dp
+private val ZOOM_BUTTON_SPACING = 10.dp
+private val ZOOM_BUTTON_MARGIN = 8.dp
 private const val DRIVER_MARKER_COLOR = 0xFF1565C0.toInt()
 private const val PICKUP_MARKER_COLOR = 0xFF2E7D32.toInt()
 private const val DROPOFF_MARKER_COLOR = 0xFFC62828.toInt()
@@ -147,14 +163,39 @@ fun OverlayContent(
                     }
                     Spacer(modifier = Modifier.height(spacing))
                     if (showMap) {
-                        RouteMiniMap(
-                            mapRoute = mapRoute,
-                            wideMapZoom = wideMapZoom,
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(mapHeight)
                                 .clipToBounds(),
-                        )
+                        ) {
+                            var mapView by remember { mutableStateOf<MapView?>(null) }
+                            RouteMiniMap(
+                                mapRoute = mapRoute,
+                                wideMapZoom = wideMapZoom,
+                                modifier = Modifier.fillMaxSize(),
+                                onMapViewReady = { mapView = it },
+                            )
+                            mapView?.let { map ->
+                                Column(
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .padding(end = ZOOM_BUTTON_MARGIN),
+                                    verticalArrangement = Arrangement.spacedBy(ZOOM_BUTTON_SPACING),
+                                ) {
+                                    ZoomButton(
+                                        icon = Icons.Default.Add,
+                                        contentDescription = "Наблизити карту",
+                                        onClick = { map.controller.zoomIn() },
+                                    )
+                                    ZoomButton(
+                                        icon = Icons.Default.Remove,
+                                        contentDescription = "Віддалити карту",
+                                        onClick = { map.controller.zoomOut() },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -168,13 +209,37 @@ private fun profitabilityColor(level: ProfitabilityLevel): Color = when (level) 
     ProfitabilityLevel.RED -> Color(0xFFC62828)
 }
 
+@Composable
+private fun ZoomButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(ZOOM_BUTTON_SIZE)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(ZOOM_ICON_SIZE),
+        )
+    }
+}
+
 /**
  * Draws pickup (client's location) -> dropoff by default; also draws the driver's current
  * location -> pickup leg when [MapRoute.driverLocation] is set (9.2, DRIVER_TO_PICKUP_AND_DROPOFF
  * route display mode).
  */
 @Composable
-private fun RouteMiniMap(mapRoute: MapRoute?, wideMapZoom: Boolean = true, modifier: Modifier = Modifier) {
+private fun RouteMiniMap(
+    mapRoute: MapRoute?,
+    wideMapZoom: Boolean = true,
+    modifier: Modifier = Modifier,
+    onMapViewReady: (MapView) -> Unit = {},
+) {
     val endpoints = listOfNotNull(mapRoute?.driverLocation, mapRoute?.pickup, mapRoute?.dropoff)
     if (mapRoute == null || listOfNotNull(mapRoute.pickup, mapRoute.dropoff).size < 2) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -195,7 +260,7 @@ private fun RouteMiniMap(mapRoute: MapRoute?, wideMapZoom: Boolean = true, modif
                 setMultiTouchControls(false)
                 zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                 isClickable = false
-            }
+            }.also(onMapViewReady)
         },
         update = { mapView ->
             mapView.overlays.clear()
