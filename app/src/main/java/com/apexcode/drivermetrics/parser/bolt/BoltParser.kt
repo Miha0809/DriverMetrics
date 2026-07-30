@@ -1,12 +1,10 @@
 package com.apexcode.drivermetrics.parser.bolt
 
-import android.view.accessibility.AccessibilityNodeInfo
 import com.apexcode.drivermetrics.core.model.TaxiOrder
 import com.apexcode.drivermetrics.core.parser.OrderParser
 import com.apexcode.drivermetrics.core.parser.PriceExtractor
 import com.apexcode.drivermetrics.core.parser.RatingExtractor
 import com.apexcode.drivermetrics.core.parser.RouteLegExtractor
-import com.apexcode.drivermetrics.core.parser.collectAllText
 import com.apexcode.drivermetrics.core.parser.containsActionButton
 import com.apexcode.drivermetrics.core.parser.isAddressLike
 import java.time.Instant
@@ -25,16 +23,14 @@ class BoltParser @Inject constructor() : OrderParser {
 
     override val sourcePackageNames = setOf("ee.mtakso.driver")
 
-    override fun canParse(root: AccessibilityNodeInfo): Boolean {
-        val texts = root.collectAllText()
+    override fun canParse(texts: List<String>): Boolean {
         // Requiring the Accept/Decline buttons (not just a price) means canParse() — and so the
         // overlay — goes false the moment the driver accepts/declines and Bolt moves off this
         // screen, rather than lingering on whatever screen comes next.
         return texts.any { PriceExtractor.extract(it) != null } && containsActionButton(texts)
     }
 
-    override fun parse(root: AccessibilityNodeInfo): TaxiOrder? =
-        parseFromTexts(root.collectAllText())
+    override fun parse(texts: List<String>): TaxiOrder? = parseFromTexts(texts)
 
     /**
      * Pure text-in, order-out extraction — kept separate from AccessibilityNodeInfo traversal
