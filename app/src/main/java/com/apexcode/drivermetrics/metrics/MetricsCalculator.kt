@@ -12,6 +12,9 @@ import com.apexcode.drivermetrics.core.model.settings.CriterionThreshold
  */
 object MetricsCalculator {
 
+    /** Unpaid waiting allowance added to €/год's time base when a driver opts in (9.7). */
+    const val FREE_WAITING_TIME_MINUTES = 2.0
+
     /**
      * @param tripRoute route from pickup (Point A) to dropoff (Point B) — the paid ride.
      * @param pickupRoute route from the driver's current location to Point A ("доїзд"); null
@@ -20,6 +23,9 @@ object MetricsCalculator {
      *   the original €/год-only [thresholds] behavior via [ProfitabilityEvaluator]'s fallback.
      * @param filterRules driver-configured hard filters (9.5); empty (the default) means none
      *   can force the result to RED.
+     * @param includeFreeWaitingTime when true, adds [FREE_WAITING_TIME_MINUTES] of unpaid waiting
+     *   allowance to the order's total time before deriving €/год (9.7); off by default so the
+     *   formula is unchanged for drivers who haven't opted in.
      */
     fun compute(
         order: TaxiOrder,
@@ -29,6 +35,7 @@ object MetricsCalculator {
         thresholds: ProfitabilityThresholds = ProfitabilityThresholds(),
         evaluationCriteria: Map<String, CriterionThreshold> = emptyMap(),
         filterRules: Map<String, Double> = emptyMap(),
+        includeFreeWaitingTime: Boolean = false,
     ): OrderMetrics {
         val price = order.price.toDouble()
         val effectivePrice = price * (1 - costSettings.commissionPercent / 100.0) -
@@ -36,13 +43,16 @@ object MetricsCalculator {
 
         val etaMinutes = pickupRoute?.durationMin ?: 0.0
         val totalMinutes = etaMinutes + tripRoute.durationMin
+        // Only €/год is derived from this padded figure — etaMinutes/totalMinutes elsewhere
+        // (displayed time, €/km distance) stay tied to the real route, not the allowance.
+        val minutesForRate = totalMinutes + if (includeFreeWaitingTime) FREE_WAITING_TIME_MINUTES else 0.0
 
         // €/km is the price spread over the whole distance actually driven for this order —
         // the deadhead to the client plus the paid trip — not just the paid trip distance.
         val totalDistanceKm = (pickupRoute?.distanceKm ?: 0.0) + tripRoute.distanceKm
 
         val pricePerKm = safeDivide(effectivePrice, totalDistanceKm)
-        val pricePerHour = safeDivide(effectivePrice, totalMinutes / 60.0)
+        val pricePerHour = safeDivide(effectivePrice, minutesForRate / 60.0)
 
         val context = EvaluationContext(
             order = order,

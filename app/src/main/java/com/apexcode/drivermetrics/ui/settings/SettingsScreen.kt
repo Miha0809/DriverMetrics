@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -53,6 +54,7 @@ import com.apexcode.drivermetrics.core.model.settings.AggregatorSettings
 import com.apexcode.drivermetrics.core.model.settings.CriterionThreshold
 import com.apexcode.drivermetrics.core.model.settings.RouteDisplayMode
 import com.apexcode.drivermetrics.core.model.settings.isDisplayOptionEnabled
+import com.apexcode.drivermetrics.metrics.MetricsCalculator
 import com.apexcode.drivermetrics.settings.AggregatorSettingsRepository
 import com.apexcode.drivermetrics.ui.common.SectionCard
 import kotlinx.coroutines.launch
@@ -141,6 +143,15 @@ fun SettingsScreen(
             }
 
             item {
+                SectionCard(title = "Час очікування", icon = Icons.Filled.Timer) {
+                    FreeWaitingTimeToggleRow(
+                        enabled = settings.includeFreeWaitingTime,
+                        onChange = { enabled -> update { it.copy(includeFreeWaitingTime = enabled) } },
+                    )
+                }
+            }
+
+            item {
                 SectionCard(title = "Критерії оцінки вигідності", icon = Icons.Filled.Tune) {
                     EVALUATION_CRITERIA_DESCRIPTORS.forEachIndexed { index, descriptor ->
                         if (index > 0) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
@@ -205,6 +216,28 @@ private fun SyncToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
                 } else {
                     "Кожен агрегатор має власні налаштування"
                 },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Switch(checked = enabled, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun FreeWaitingTimeToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Чи враховувати безплатний час очікування до статистики?", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = "Додає ${formatNumber(MetricsCalculator.FREE_WAITING_TIME_MINUTES)} хв до загального часу " +
+                    "замовлення перед розрахунком €/год",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

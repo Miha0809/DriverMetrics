@@ -16,6 +16,10 @@ data class AggregatorSettings(
     val evaluationCriteria: Map<String, CriterionThreshold> = emptyMap(),
     val filterRules: Map<String, Double> = emptyMap(),
     val displayOptions: Map<String, Boolean> = emptyMap(),
+    // Off by default: preserves the existing €/год formula for drivers who haven't opened
+    // settings. When on, MetricsCalculator adds MetricsCalculator.FREE_WAITING_TIME_MINUTES to
+    // the order's total time before deriving €/год, per the driver's real free waiting allowance.
+    val includeFreeWaitingTime: Boolean = false,
 )
 
 /** Missing id = on, so existing settings blobs (saved before a new toggle existed) still show it. */
