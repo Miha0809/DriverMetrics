@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import com.apexcode.drivermetrics.core.model.TaxiOrder
 import com.apexcode.drivermetrics.core.parser.ParserRegistry
 import com.apexcode.drivermetrics.overlay.OverlayController
 import com.apexcode.drivermetrics.pipeline.CurrentOrderRepository
@@ -46,17 +48,22 @@ class DriverMetricsAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        val packageName = event?.packageName?.toString() ?: return
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        val eventType = event?.eventType ?: return
+        if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED
         ) {
             return
         }
-        pipelineStatusRepository.recordEvent(packageName)
-        scheduleAnalysis(packageName)
+        // TYPE_WINDOWS_CHANGED — fired when the set of windows on screen changes, e.g. Uber's
+        // own new-order popup appearing as a separate window without stealing focus, unlike
+        // Bolt which brings its main screen to the foreground — doesn't reliably carry a useful
+        // packageName of its own, so this is purely a "something worth re-checking" signal.
+        pipelineStatusRepository.recordEvent(event.packageName?.toString() ?: "(windows changed)")
+        scheduleAnalysis()
     }
 
-    private fun scheduleAnalysis(packageName: String) {
+    private fun scheduleAnalysis() {
         val scope = serviceScope ?: return
         val now = SystemClock.elapsedRealtime()
         if (pendingAnalysis == null) {
@@ -70,19 +77,53 @@ class DriverMetricsAccessibilityService : AccessibilityService() {
         pendingAnalysis = scope.launch {
             delay(delayMs)
             pendingAnalysis = null
-            analyze(packageName)
+            analyze()
         }
     }
 
-    private suspend fun analyze(packageName: String) {
-        val root = rootInActiveWindow
-        if (root == null) {
-            currentOrderRepository.update(null)
-            return
-        }
-        val order = parserRegistry.parseOrder(packageName, root)
+    private suspend fun analyze() {
+        val order = findOrder()
         pipelineStatusRepository.recordOrder(order)
         currentOrderRepository.update(order)
+    }
+
+    /**
+     * Scans every currently visible window belonging to a tracked aggregator app (the same set
+     * declared in accessibility_service_config.xml's packageNames) — not just rootInActiveWindow
+     * — and returns the first order any registered parser recognizes.
+     *
+     * rootInActiveWindow alone only ever exposes ONE window, and for Uber that isn't
+     * necessarily the right one: a new order shows up in Uber's own popup/alert-style window
+     * layered on top of whatever else is on screen, which doesn't take focus and so never
+     * becomes the "active" window — Bolt, by contrast, brings its main screen to the foreground,
+     * which is why rootInActiveWindow alone used to work for it. Trying every tracked window
+     * (deduped by window id, rootInActiveWindow included as a safety net) instead of special
+     * -casing Uber keeps this generic for any future aggregator that shows orders the same way.
+     */
+    private fun findOrder(): TaxiOrder? {
+        val trackedPackages = serviceInfo?.packageNames?.toSet() ?: emptySet()
+        if (trackedPackages.isEmpty()) return null
+
+        val seenWindowIds = mutableSetOf<Int>()
+        val roots = mutableListOf<Pair<String, AccessibilityNodeInfo>>()
+
+        windows?.forEach { window ->
+            val root = window.root ?: return@forEach
+            val pkg = root.packageName?.toString() ?: return@forEach
+            if (pkg in trackedPackages && seenWindowIds.add(window.id)) {
+                roots += pkg to root
+            }
+        }
+
+        rootInActiveWindow?.let { active ->
+            val pkg = active.packageName?.toString()
+            val activeWindowId = active.window?.id
+            if (pkg in trackedPackages && (activeWindowId == null || seenWindowIds.add(activeWindowId))) {
+                roots += pkg!! to active
+            }
+        }
+
+        return roots.firstNotNullOfOrNull { (pkg, root) -> parserRegistry.parseOrder(pkg, root) }
     }
 
     override fun onInterrupt() {

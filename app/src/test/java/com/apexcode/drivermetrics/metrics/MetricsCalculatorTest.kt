@@ -89,6 +89,29 @@ class MetricsCalculatorTest {
     }
 
     @Test
+    fun `free waiting time is excluded from price per hour by default`() {
+        val metrics = MetricsCalculator.compute(
+            order = order("15"),
+            tripRoute = RouteInfo(distanceKm = 10.0, durationMin = 30.0),
+        )
+        // total time = 30 min = 0.5h -> 15 / 0.5 = 30 €/h, unaffected by the free waiting allowance
+        assertEquals(30.0, metrics.pricePerHour, 0.0001)
+    }
+
+    @Test
+    fun `free waiting time pads the total time used for price per hour when enabled`() {
+        val metrics = MetricsCalculator.compute(
+            order = order("15"),
+            tripRoute = RouteInfo(distanceKm = 10.0, durationMin = 30.0),
+            includeFreeWaitingTime = true,
+        )
+        // total time = 30 + 2 (free waiting) = 32 min = 0.5333h -> 15 / 0.5333h = 28.125 €/h
+        assertEquals(28.125, metrics.pricePerHour, 0.0001)
+        // etaMinutes still reflects the real route, not the padded figure used for €/год
+        assertEquals(0.0, metrics.etaMinutes, 0.0001)
+    }
+
+    @Test
     fun `profitability classifies green, yellow and red using thresholds`() {
         val thresholds = ProfitabilityThresholds(greenAtOrAbovePricePerHour = 20.0, redBelowPricePerHour = 10.0)
 

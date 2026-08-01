@@ -82,6 +82,7 @@ class OrderOrchestrator @Inject constructor(
                 pickupRoute = pickupRoute,
                 evaluationCriteria = settings.evaluationCriteria,
                 filterRules = settings.filterRules,
+                includeFreeWaitingTime = settings.includeFreeWaitingTime,
             )
 
             // Displayed distance/duration are the whole order — the доїзд to the client plus the
